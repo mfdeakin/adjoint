@@ -36,8 +36,19 @@ for i in range(orig.cells_x()):
     for j in range(orig.cells_y()):
         y = orig.median_y(j)
         orig[(i, j)] = f(x, y)
-
 bc.apply(orig)
+
+int_check = Mesh((0.0, 0.0), (1.0, 1.0), 128, 128)
+for i in range(int_check.cells_x()):
+    x = int_check.median_x(i)
+    for j in range(int_check.cells_y()):
+        y = int_check.median_y(j)
+        int_check[(i, j)] = orig.interpolate(x, y)
+
+err_interpolated = (int_check.array() -
+                    f(int_check.grid_x(), int_check.grid_y()))[1:-1, 1:-1]
+plot_3d(int_check.grid_x()[1:-1, 1:-1], int_check.grid_y()[1:-1, 1:-1], err_interpolated,
+        "Interpolate Error")
 
 plot_mesh(orig, "Fine sin(pi * x) * sin(pi * y)")
 
@@ -53,13 +64,13 @@ bc.apply(restriction)
 # Restriction only occurs on the internal cells,
 # the ghost cells need to be excluded when examining the error
 err_restricted = (restriction.array()
-                  - f(restriction.grid_x(), restriction.grid_y()))[1:-1, 1:-1]
+                  + f(restriction.grid_x(), restriction.grid_y()))[1:-1, 1:-1]
 plot_3d(restriction.grid_x()[1:-1, 1:-1], restriction.grid_y()[1:-1, 1:-1],
         err_restricted, "Restriction Error")
 
 prolongated = Mesh((0.0, 0.0), (1.0, 1.0), 64, 64)
 restriction.prolongate(prolongated)
-err_prolongated = (prolongated.array() - orig.array())[1:-1, 1:-1]
+err_prolongated = (prolongated.array() + orig.array())[1:-1, 1:-1]
 plot_3d(prolongated.grid_x()[1:-1, 1:-1], prolongated.grid_y()[1:-1, 1:-1],
         err_prolongated, "Prolongated Error")
 figure()
@@ -67,4 +78,7 @@ pcolor(err_prolongated)
 colorbar()
 title("Prolongated Error")
 
-plot_mesh(prolongated, "Prolongated sin(pi * x) * sin(pi * y)")
+plot_3d(prolongated.grid_x()[1:-1, 1:-1], prolongated.grid_y()[1:-1, 1:-1],
+        -prolongated.array()[1:-1, 1:-1], "Prolongated sin(pi * x) * sin(pi * y)")
+
+show()
