@@ -31,6 +31,7 @@ void define_solver(py::module module) {
   using container = std::vector<std::tuple<int, int, real>>;
   poisson.def("solve", &Solver::template solve<container>);
   if constexpr(mg_levels > 1) {
+    poisson.def("error_solver", &Solver::error_mesh);
     define_solver<mg_levels - 1>(module);
   }
 }
@@ -53,6 +54,8 @@ PYBIND11_MODULE(multigrid, module) {
       .def("cells_y", &Mesh::cells_y)
       .def("median_x", &Mesh::median_x)
       .def("median_y", &Mesh::median_y)
+      .def("dx", &Mesh::dx)
+      .def("dy", &Mesh::dy)
       .def("array",
            [](Mesh &m) {
              return py::array((m.cells_x() + 2 * m.ghost_cells) *
@@ -126,6 +129,7 @@ PYBIND11_MODULE(multigrid, module) {
   poisson_base.def("restrict", &Base::restrict)
       .def("prolongate", &Base::prolongate)
       .def("source", &Base::source)
+      .def("delta", &Base::delta)
       .def("poisson_pgs_or", &Base::poisson_pgs_or);
 
   define_solver<10>(module);
