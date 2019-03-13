@@ -42,8 +42,8 @@ Mesh::Mesh(const std::pair<real, real> &corner_1,
 // Note that we can use this to implement multigrid for mesh size ratios
 // other than factors of 2
 real Mesh::interpolate(real x, real y) const noexcept {
-  const int left_cell   = x_idx(x - dx_ / 2.0);
-  const int right_cell  = left_cell + 1;
+  const int right_cell  = x_idx(x + dx_ / 2.0);
+  const int left_cell   = right_cell - 1;
   const int top_cell    = y_idx(y + dy_ / 2.0);
   const int bottom_cell = top_cell - 1;
   assert(left_cell >= -1);
@@ -208,7 +208,7 @@ real PoissonFVMGSolverBase::delta(const int i, const int j) const noexcept {
 }
 
 real PoissonFVMGSolverBase::poisson_pgs_or(const real or_term) noexcept {
-  real max_diff       = -std::numeric_limits<real>::infinity();
+  real max_diff = -std::numeric_limits<real>::infinity();
   bc_.apply(*this);
   const real diff_scale =
       (dx_ * dx_ * dy_ * dy_ / (2.0 * (dx_ * dx_ + dy_ * dy_)));
@@ -216,7 +216,7 @@ real PoissonFVMGSolverBase::poisson_pgs_or(const real or_term) noexcept {
     for(int j = 0; j < cells_y(); j++) {
       const real inv_scale = 1.0 / (2.0 * (dx_ * dx_ + dy_ * dy_));
       const real diff      = or_term * diff_scale * delta(i, j);
-      max_diff             = std::max(max_diff, diff);
+      max_diff             = std::max(max_diff, std::abs(diff));
       cv_average(i, j) += diff;
     }
   }
@@ -265,9 +265,10 @@ real PoissonFVMGSolverBase::prolongate(Mesh &dest) const noexcept {
   for(int i = 0; i < dest.cells_x(); i++) {
     const real x = dest.median_x(i);
     for(int j = 0; j < dest.cells_y(); j++) {
-      const real y = dest.median_y(j);
+      const real y    = dest.median_y(j);
       const real diff = interpolate(x, y);
-      max_diff        = std::max(max_diff, diff);
+      // const real diff = cv_average(i / 2, j / 2);
+      max_diff = std::max(max_diff, std::abs(diff));
       dest[{i, j}] += diff;
     }
   }
