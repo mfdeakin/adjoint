@@ -40,12 +40,12 @@ class Mesh {
     return min_y_ + dy_ / 2 + cell_y * dy_;
   }
 
-  constexpr int x_idx(real x) const noexcept {
-    return static_cast<int>(x / dx_ - min_x_ / dx_);
+  int x_idx(real x) const noexcept {
+    return std::floor(x / dx_ - min_x_ / dx_);
   }
 
-  constexpr int y_idx(real y) const noexcept {
-    return static_cast<int>(y / dy_ - min_y_ / dy_);
+  int y_idx(real y) const noexcept {
+    return std::floor(y / dy_ - min_y_ / dy_);
   }
 
   constexpr real dx() const noexcept { return dx_; }

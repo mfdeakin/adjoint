@@ -214,9 +214,8 @@ real PoissonFVMGSolverBase::poisson_pgs_or(const real or_term) noexcept {
       (dx_ * dx_ * dy_ * dy_ / (2.0 * (dx_ * dx_ + dy_ * dy_)));
   for(int i = 0; i < cells_x(); i++) {
     for(int j = 0; j < cells_y(); j++) {
-      const real inv_scale = 1.0 / (2.0 * (dx_ * dx_ + dy_ * dy_));
-      const real diff      = or_term * diff_scale * delta(i, j);
-      max_diff             = std::max(max_diff, std::abs(diff));
+      const real diff = or_term * diff_scale * delta(i, j);
+      max_diff        = std::max(max_diff, std::abs(diff));
       cv_average(i, j) += diff;
     }
   }
@@ -289,11 +288,12 @@ PoissonFVMGSolver<mg_levels_>::PoissonFVMGSolver(
     : PoissonFVMGSolverBase(corner_1, corner_2, cells_x, cells_y, bc),
       multilev_(corner_1, corner_2, cells_x / 2, cells_y / 2, mg_bc(bc),
                 zero_source) {
+#ifndef NDEBUG
   assert(cells_x % (1 << (mg_levels_ - 1)) == 0);
   assert(cells_y % (1 << (mg_levels_ - 1)) == 0);
   assert(multilev_.bc_.bottom_bc().first == bc_.bottom_bc().first);
   assert(multilev_.bc_.top_bc().first == bc_.top_bc().first);
-  for(int i = 0; i < cells_x; i++) {
+  for(size_t i = 0; i < cells_x; i++) {
     const real bottom_y = this->bottom_y(0);
     const real x        = median_x(i);
     assert(multilev_.bc_.bottom_bc().second(x, bottom_y) == 0.0);
@@ -302,13 +302,14 @@ PoissonFVMGSolver<mg_levels_>::PoissonFVMGSolver(
   }
   assert(multilev_.bc_.left_bc().first == bc_.left_bc().first);
   assert(multilev_.bc_.right_bc().first == bc_.right_bc().first);
-  for(int j = 0; j < cells_y; j++) {
+  for(size_t j = 0; j < cells_y; j++) {
     const real left_x = this->left_x(0);
     const real y      = median_y(j);
     assert(multilev_.bc_.left_bc().second(left_x, y) == 0.0);
     const real right_x = this->right_x(cells_x);
     assert(multilev_.bc_.right_bc().second(right_x, y) == 0.0);
   }
+#endif  // NDEBUG
 }
 
 template <int mg_levels_>
@@ -320,6 +321,7 @@ PoissonFVMGSolver<mg_levels_>::PoissonFVMGSolver(
     : PoissonFVMGSolverBase(corner_1, corner_2, cells_x, cells_y, bc, source),
       multilev_(corner_1, corner_2, cells_x / 2, cells_y / 2, mg_bc(bc),
                 zero_source) {
+#ifndef NDEBUG
   assert(cells_x % (1 << (mg_levels_ - 1)) == 0);
   assert(cells_y % (1 << (mg_levels_ - 1)) == 0);
   assert(multilev_.bc_.bottom_bc().first == bc_.bottom_bc().first);
@@ -340,6 +342,7 @@ PoissonFVMGSolver<mg_levels_>::PoissonFVMGSolver(
     const real right_x = this->right_x(cells_x);
     assert(multilev_.bc_.right_bc().second(right_x, y) == 0.0);
   }
+#endif  // NDEBUG
 }
 
 PoissonFVMGSolver<1>::PoissonFVMGSolver(const std::pair<real, real> &corner_1,
