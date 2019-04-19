@@ -14,20 +14,26 @@ namespace py = pybind11;
 
 // This just exports all the objects needed in Python
 
-template <int mg_levels>
+template <int mg_levels, unsigned int order_ = 2>
 void define_solver(py::module module) {
   std::stringstream ss;
   ss << "PoissonFVMG_" << mg_levels;
-  using Solver = PoissonFVMGSolver<mg_levels>;
-  py::class_<Solver, PoissonFVMGSolverBase> poisson(module, ss.str().c_str());
+  using Solver = PoissonFVMGSolver<mg_levels, order_>;
+  py::class_<Solver, PoissonFVMGSolverBase<order_>> poisson(module,
+                                                            ss.str().c_str());
   poisson
       .def(
           py::init<const std::pair<real, real> &, const std::pair<real, real> &,
-                   size_t, size_t, BoundaryConditions &,
+                   size_t, size_t, const BoundaryConditions &,
                    const std::function<real(real, real)> &>())
       .def(
           py::init<const std::pair<real, real> &, const std::pair<real, real> &,
-                   size_t, size_t, BoundaryConditions &>());
+                   size_t, size_t, const std::function<real(real, real)> &>())
+      .def(
+          py::init<const std::pair<real, real> &, const std::pair<real, real> &,
+                   size_t, size_t, const BoundaryConditions &>())
+      .def(py::init<const std::pair<real, real> &,
+                    const std::pair<real, real> &, size_t, size_t>());
   using container = std::vector<std::tuple<int, int, real>>;
   poisson.def("solve", &Solver::template solve<container>);
   if constexpr(mg_levels > 1) {
@@ -58,52 +64,52 @@ PYBIND11_MODULE(multigrid, module) {
       .def("dy", &Mesh::dy)
       .def("array",
            [](Mesh &m) {
-             return py::array((m.cells_x() + 2 * m.ghost_cells) *
-                                  (m.cells_y() + 2 * m.ghost_cells),
-                              m.data().data())
-                 .attr("reshape")(m.cells_x() + 2 * m.ghost_cells,
-                                  m.cells_y() + 2 * m.ghost_cells);
+             return py::array((m.cells_x() + 2 * m.ghost_cells()) *
+                                  (m.cells_y() + 2 * m.ghost_cells()),
+                              m.data())
+                 .attr("reshape")(m.cells_x() + 2 * m.ghost_cells(),
+                                  m.cells_y() + 2 * m.ghost_cells());
            })
       .def("interpolate", &Mesh::interpolate)
       .def("grid_x",
            [](Mesh &m) {
              xt::xtensor<real, 2> grid(std::array<size_t, 2>{
-                 static_cast<size_t>(m.cells_x() + 2 * m.ghost_cells),
-                 static_cast<size_t>(m.cells_y() + 2 * m.ghost_cells)});
-             for(int i = 0; i < m.cells_x() + 2 * m.ghost_cells; i++) {
-               for(int j = 0; j < m.cells_y() + 2 * m.ghost_cells; j++) {
-                 grid(i, j) = m.median_x(i - m.ghost_cells);
+                 static_cast<size_t>(m.cells_x() + 2 * m.ghost_cells()),
+                 static_cast<size_t>(m.cells_y() + 2 * m.ghost_cells())});
+             for(int i = 0; i < m.cells_x() + 2 * m.ghost_cells(); i++) {
+               for(int j = 0; j < m.cells_y() + 2 * m.ghost_cells(); j++) {
+                 grid(i, j) = m.median_x(i - m.ghost_cells());
                }
              }
-             return py::array((m.cells_x() + 2 * m.ghost_cells) *
-                                  (m.cells_y() + 2 * m.ghost_cells),
+             return py::array((m.cells_x() + 2 * m.ghost_cells()) *
+                                  (m.cells_y() + 2 * m.ghost_cells()),
                               grid.data())
-                 .attr("reshape")(m.cells_x() + 2 * m.ghost_cells,
-                                  m.cells_y() + 2 * m.ghost_cells);
+                 .attr("reshape")(m.cells_x() + 2 * m.ghost_cells(),
+                                  m.cells_y() + 2 * m.ghost_cells());
            })
       .def("grid_y", [](Mesh &m) {
         xt::xtensor<real, 2> grid(std::array<size_t, 2>{
-            static_cast<size_t>(m.cells_x() + 2 * m.ghost_cells),
-            static_cast<size_t>(m.cells_y() + 2 * m.ghost_cells)});
-        for(int i = 0; i < m.cells_x() + 2 * m.ghost_cells; i++) {
-          for(int j = 0; j < m.cells_y() + 2 * m.ghost_cells; j++) {
-            grid(i, j) = m.median_y(j - m.ghost_cells);
+            static_cast<size_t>(m.cells_x() + 2 * m.ghost_cells()),
+            static_cast<size_t>(m.cells_y() + 2 * m.ghost_cells())});
+        for(int i = 0; i < m.cells_x() + 2 * m.ghost_cells(); i++) {
+          for(int j = 0; j < m.cells_y() + 2 * m.ghost_cells(); j++) {
+            grid(i, j) = m.median_y(j - m.ghost_cells());
           }
         }
-        return py::array((m.cells_x() + 2 * m.ghost_cells) *
-                             (m.cells_y() + 2 * m.ghost_cells),
+        return py::array((m.cells_x() + 2 * m.ghost_cells()) *
+                             (m.cells_y() + 2 * m.ghost_cells()),
                          grid.data())
-            .attr("reshape")(m.cells_x() + 2 * m.ghost_cells,
-                             m.cells_y() + 2 * m.ghost_cells);
+            .attr("reshape")(m.cells_x() + 2 * m.ghost_cells(),
+                             m.cells_y() + 2 * m.ghost_cells());
       });
 
   py::class_<BoundaryConditions> bc(module, "BoundaryConditions");
-  bc.def(py::init<BoundaryConditions::BC_Type, std::function<real(real, real)>,
-                  BoundaryConditions::BC_Type, std::function<real(real, real)>,
-                  BoundaryConditions::BC_Type, std::function<real(real, real)>,
-                  BoundaryConditions::BC_Type,
+  bc.def(py::init<real, real, BoundaryConditions::BC_Type,
+                  std::function<real(real, real)>, BoundaryConditions::BC_Type,
+                  std::function<real(real, real)>, BoundaryConditions::BC_Type,
+                  std::function<real(real, real)>, BoundaryConditions::BC_Type,
                   std::function<real(real, real)>>())
-      .def(py::init<>())
+      .def(py::init<real, real>())
       .def("left_bc", &BoundaryConditions::left_bc)
       .def("right_bc", &BoundaryConditions::right_bc)
       .def("top_bc", &BoundaryConditions::top_bc)
@@ -115,22 +121,26 @@ PYBIND11_MODULE(multigrid, module) {
       .value("neumann", BoundaryConditions::BC_Type::neumann)
       .export_values();
 
-  using Base = PoissonFVMGSolverBase;
-  py::class_<PoissonFVMGSolverBase, Mesh> poisson_base(module,
-                                                       "PoissonFVMGBase");
-  poisson_base
+  using Base2 = PoissonFVMGSolverBase<2>;
+  py::class_<Base2, Mesh> poisson_base_2(module, "PoissonFVMGBase2");
+  poisson_base_2
       .def(
           py::init<const std::pair<real, real> &, const std::pair<real, real> &,
-                   size_t, size_t, BoundaryConditions &,
+                   size_t, size_t, const BoundaryConditions &,
                    const std::function<real(real, real)> &>())
       .def(
           py::init<const std::pair<real, real> &, const std::pair<real, real> &,
-                   size_t, size_t, BoundaryConditions &>());
-  poisson_base.def("restrict", &Base::restrict)
-      .def("prolongate", &Base::prolongate)
-      .def("source", &Base::source)
-      .def("delta", &Base::delta)
-      .def("poisson_pgs_or", &Base::poisson_pgs_or);
+                   size_t, size_t, const std::function<real(real, real)> &>())
+      .def(
+          py::init<const std::pair<real, real> &, const std::pair<real, real> &,
+                   size_t, size_t, const BoundaryConditions &>())
+      .def(py::init<const std::pair<real, real> &,
+                    const std::pair<real, real> &, size_t, size_t>());
+  poisson_base_2.def("restrict", &Base2::restrict)
+      .def("prolongate", &Base2::prolongate)
+      .def("source", &Base2::source)
+      .def("delta", &Base2::delta)
+      .def("poisson_pgs_or", &Base2::poisson_pgs_or);
 
   define_solver<10>(module);
 }

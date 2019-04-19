@@ -7,13 +7,12 @@
 
 #include "xtensor/xtensor.hpp"
 
+#include "polynomial/polynomial.hpp"
+
 using real = double;
 
 class Mesh {
  public:
-  // Assume a single ghost cell on each side of the boundary
-  static constexpr int ghost_cells = 1;
-
   // Cells are (externally) zero referenced from the bottom left corners
   // interior cell
   constexpr real left_x(int cell_x) const noexcept {
@@ -54,17 +53,18 @@ class Mesh {
 
   Mesh(const std::pair<real, real> &corner_1,
        const std::pair<real, real> &corner_2, const size_t x_cells,
-       const size_t cells_y) noexcept;
+       const size_t cells_y, const size_t num_ghostcells = 1) noexcept;
 
   Mesh(const std::pair<real, real> &corner_1,
        const std::pair<real, real> &corner_2, const size_t x_cells,
-       const size_t cells_y, std::function<real(real, real)> f) noexcept;
+       const size_t cells_y, std::function<real(real, real)> f,
+       const size_t num_ghostcells = 1) noexcept;
 
   real cv_average(int i, int j) const noexcept {
-    return cva_(i + ghost_cells, j + ghost_cells);
+    return cva_(i + ghost_cells(), j + ghost_cells());
   }
   real &cv_average(int i, int j) noexcept {
-    return cva_(i + ghost_cells, j + ghost_cells);
+    return cva_(i + ghost_cells(), j + ghost_cells());
   }
 
   real operator[](std::pair<int, int> idx) const noexcept {
@@ -77,14 +77,19 @@ class Mesh {
   real interpolate(real x, real y) const noexcept;
   real operator()(real x, real y) const noexcept { return interpolate(x, y); }
 
-  const xt::xtensor<real, 2> data() const noexcept { return cva_; }
+  const xt::xtensor<real, 2> array() const noexcept { return cva_; }
+  const real *data() const noexcept { return cva_.data(); }
 
-  int cells_x() const noexcept { return cva_.shape()[0] - 2 * ghost_cells; }
-  int cells_y() const noexcept { return cva_.shape()[1] - 2 * ghost_cells; }
+  int cells_x() const noexcept { return cva_.shape()[0] - 2 * ghost_cells(); }
+  int cells_y() const noexcept { return cva_.shape()[1] - 2 * ghost_cells(); }
+
+  constexpr int ghost_cells() const noexcept { return ghost_cells_; }
 
  protected:
   real min_x_, max_x_, min_y_, max_y_;
   real dx_, dy_;
+
+  int ghost_cells_;
 
   xt::xtensor<real, 2> cva_;
 };
@@ -95,7 +100,7 @@ class BoundaryConditions {
 
   static real homogeneous(real, real) { return 0.0; }
 
-  BoundaryConditions()
+  BoundaryConditions(const real dx, const real dy)
       : left_t_(BC_Type::dirichlet),
         right_t_(BC_Type::dirichlet),
         top_t_(BC_Type::dirichlet),
@@ -103,12 +108,19 @@ class BoundaryConditions {
         left_bc_(&homogeneous),
         right_bc_(&homogeneous),
         top_bc_(&homogeneous),
-        bottom_bc_(&homogeneous) {}
-  BoundaryConditions(
-      const BC_Type left_t, const std::function<real(real, real)> &left_bc,
-      const BC_Type right_t, const std::function<real(real, real)> &right_bc,
-      const BC_Type top_t, const std::function<real(real, real)> &top_bc,
-      const BC_Type bottom_t, const std::function<real(real, real)> &bottom_bc);
+        bottom_bc_(&homogeneous),
+        horiz_basis(),
+        vert_basis() {
+    construct_bases(dx, dy);
+  }
+  BoundaryConditions(const real dx, const real dy, const BC_Type left_t,
+                     const std::function<real(real, real)> &left_bc,
+                     const BC_Type right_t,
+                     const std::function<real(real, real)> &right_bc,
+                     const BC_Type top_t,
+                     const std::function<real(real, real)> &top_bc,
+                     const BC_Type bottom_t,
+                     const std::function<real(real, real)> &bottom_bc);
 
   void apply(Mesh &mesh) const noexcept;
 
@@ -128,19 +140,46 @@ class BoundaryConditions {
   }
 
  protected:
+  void construct_bases(const real dx, const real dy);
+
   BC_Type left_t_, right_t_, top_t_, bottom_t_;
   std::function<real(real, real)> left_bc_;
   std::function<real(real, real)> right_bc_;
   std::function<real(real, real)> top_bc_;
   std::function<real(real, real)> bottom_bc_;
+
+  // Polynomials used to interpolate the ghost cell values
+  // The first polynomial is 1 at the boundary and integrates to 0 in the 3
+  // interior cells
+  //
+  // The i'th polynomial is 0 at the boundary and integrates to 0 in the 2 of
+  // the 3 interior cells, it integrates to 1 in the i'th cell
+  //
+  // Note that a coordinate transformation is necessary to use these for the top
+  // and right ghost cells, this just amounts to negating the x and y directions
+  // and shifting the boundary to 0
+  std::array<Numerical::Polynomial<real, 3, 1>, 4> horiz_basis;
+  std::array<Numerical::Polynomial<real, 3, 1>, 4> vert_basis;
 };
 
+template <unsigned int order_ = 2>
 class PoissonFVMGSolverBase : public Mesh {
  public:
+  // Homogeneous Dirichlet Boundary conditions with 0 source term
+  PoissonFVMGSolverBase(const std::pair<real, real> &corner_1,
+                        const std::pair<real, real> &corner_2,
+                        const size_t cells_x, const size_t cells_y) noexcept;
+
+  // 0 source term
   PoissonFVMGSolverBase(const std::pair<real, real> &corner_1,
                         const std::pair<real, real> &corner_2,
                         const size_t cells_x, const size_t cells_y,
                         const BoundaryConditions &bc) noexcept;
+
+  PoissonFVMGSolverBase(const std::pair<real, real> &corner_1,
+                        const std::pair<real, real> &corner_2,
+                        const size_t cells_x, const size_t cells_y,
+                        const std::function<real(real, real)> &source) noexcept;
 
   PoissonFVMGSolverBase(const std::pair<real, real> &corner_1,
                         const std::pair<real, real> &corner_2,
@@ -161,13 +200,22 @@ class PoissonFVMGSolverBase : public Mesh {
   Mesh source_;
 };
 
-template <int mg_levels_>
-class PoissonFVMGSolver : public PoissonFVMGSolverBase {
+template <int mg_levels_, unsigned int order_ = 2>
+class PoissonFVMGSolver : public PoissonFVMGSolverBase<order_> {
  public:
+  PoissonFVMGSolver(const std::pair<real, real> &corner_1,
+                    const std::pair<real, real> &corner_2, const size_t cells_x,
+                    const size_t cells_y) noexcept;
+
   PoissonFVMGSolver(const std::pair<real, real> &corner_1,
                     const std::pair<real, real> &corner_2, const size_t cells_x,
                     const size_t cells_y,
                     const BoundaryConditions &bc) noexcept;
+
+  PoissonFVMGSolver(const std::pair<real, real> &corner_1,
+                    const std::pair<real, real> &corner_2, const size_t cells_x,
+                    const size_t cells_y,
+                    const std::function<real(real, real)> &source) noexcept;
 
   PoissonFVMGSolver(const std::pair<real, real> &corner_1,
                     const std::pair<real, real> &corner_2, const size_t cells_x,
@@ -188,7 +236,7 @@ class PoissonFVMGSolver : public PoissonFVMGSolverBase {
 
   const Coarsen &error_mesh() { return multilev_; };
 
-  template <int>
+  template <int, unsigned int>
   friend class PoissonFVMGSolver;
 
  protected:
@@ -208,13 +256,13 @@ class PoissonFVMGSolver : public PoissonFVMGSolverBase {
         const int num_iter = std::get<1>(*iterations);
         const real or_term = std::get<2>(*iterations);
         for(int i = 0; i < num_iter; i++) {
-          max_delta += poisson_pgs_or(or_term);
+          max_delta += this->poisson_pgs_or(or_term);
         }
         iterations++;
       } else {
         // level < mg_levels_; run pgs at a more coarse scale
         // We need the boundary conditions to hold when computing the residual
-        bc_.apply(*this);
+        this->bc_.apply(*this);
         multilev_.restrict(*this);
         auto [iter_processed, delta] = multilev_.solve_int(iterations, end);
         multilev_.bc_.apply(multilev_);
@@ -230,15 +278,24 @@ class PoissonFVMGSolver : public PoissonFVMGSolverBase {
   Coarsen multilev_;
 };
 
-template <>
-class PoissonFVMGSolver<1> : public PoissonFVMGSolverBase {
+template <unsigned int order_>
+class PoissonFVMGSolver<1, order_> : public PoissonFVMGSolverBase<order_> {
  public:
   static constexpr int mg_levels_ = 1;
 
   PoissonFVMGSolver(const std::pair<real, real> &corner_1,
                     const std::pair<real, real> &corner_2, const size_t cells_x,
+                    const size_t cells_y) noexcept;
+
+  PoissonFVMGSolver(const std::pair<real, real> &corner_1,
+                    const std::pair<real, real> &corner_2, const size_t cells_x,
                     const size_t cells_y,
                     const BoundaryConditions &bc) noexcept;
+
+  PoissonFVMGSolver(const std::pair<real, real> &corner_1,
+                    const std::pair<real, real> &corner_2, const size_t cells_x,
+                    const size_t cells_y,
+                    const std::function<real(real, real)> &source) noexcept;
 
   PoissonFVMGSolver(const std::pair<real, real> &corner_1,
                     const std::pair<real, real> &corner_2, const size_t cells_x,
@@ -255,7 +312,7 @@ class PoissonFVMGSolver<1> : public PoissonFVMGSolverBase {
     return max_delta;
   }
 
-  template <int>
+  template <int, unsigned int>
   friend class PoissonFVMGSolver;
 
  protected:
@@ -274,7 +331,7 @@ class PoissonFVMGSolver<1> : public PoissonFVMGSolverBase {
       const int num_iter = std::get<1>(*iterations);
       const real or_term = std::get<2>(*iterations);
       for(int i = 0; i < num_iter; i++) {
-        max_delta += poisson_pgs_or(or_term);
+        max_delta += this->poisson_pgs_or(or_term);
       }
       iterations++;
     }

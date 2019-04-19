@@ -13,8 +13,7 @@ real test_residual(real x, real y) { return -2.0 * pi * pi * test_func(x, y); }
 TEST(mesh, cell_overlap) {
   // Verifies that the multigrid cells are lined up with the finer cells
   constexpr int cells_x = 32, cells_y = 32;
-  PoissonFVMGSolver<2> fine({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y,
-                            BoundaryConditions());
+  PoissonFVMGSolver<2> fine({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y);
   const PoissonFVMGSolver<1> &coarse = fine.error_mesh();
   EXPECT_EQ(2 * coarse.cells_x(), fine.cells_x());
   for(int i = 0; i < coarse.cells_x(); i++) {
@@ -49,8 +48,7 @@ TEST(boundary_cond, homogeneous) {
   // Verifies that the boundary conditions are only applied to the ghost cells,
   // and that the boundary value is 0.0
   constexpr int cells_x = 32, cells_y = 32;
-  PoissonFVMGSolver<2> fine({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y,
-                            BoundaryConditions());
+  PoissonFVMGSolver<2> fine({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y);
   EXPECT_EQ(fine.error_mesh().bconds().left_bc().first,
             fine.bconds().left_bc().first);
   EXPECT_EQ(fine.error_mesh().bconds().right_bc().first,
@@ -88,10 +86,9 @@ TEST(boundary_cond, homogeneous) {
 
 TEST(poisson, residual) {
   constexpr int cells_x = 32, cells_y = 32;
-  BoundaryConditions bc;  // Default homogeneous Dirichlet
 
   // The solver for the homogeneous Poisson problem
-  PoissonFVMGSolverBase test({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y, bc);
+  PoissonFVMGSolverBase test({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y);
   // Initialize its solution guess with the test function
   for(int i = 0; i < test.cells_x(); i++) {
     const real x = test.median_x(i);
@@ -111,7 +108,8 @@ TEST(poisson, residual) {
 
 TEST(multigrid, transfer_simple) {
   constexpr int cells_x = 64, cells_y = 64;
-  BoundaryConditions bc;  // Default homogeneous Dirichlet
+  BoundaryConditions bc(1.0 / cells_x,
+                        1.0 / cells_y);  // Default homogeneous Dirichlet
 
   // The solver for the homogeneous Poisson problem
   PoissonFVMGSolverBase src({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y, bc,
@@ -173,10 +171,9 @@ TEST(multigrid, transfer_simple) {
 
 TEST(multigrid, transfer_combined) {
   constexpr int cells_x = 64, cells_y = 64;
-  BoundaryConditions bc;  // Default homogeneous Dirichlet
 
   // The solver for the homogeneous Poisson problem
-  PoissonFVMGSolverBase src({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y, bc);
+  PoissonFVMGSolverBase src({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y);
   // Initialize its solution guess and ghost cells with the test function
   for(int i = -1; i <= src.cells_x(); i++) {
     const real x = src.median_x(i);
@@ -186,8 +183,7 @@ TEST(multigrid, transfer_combined) {
     }
   }
   // src.delta(i, j) = \del test_func(x, y)
-  PoissonFVMGSolver<1> dest({0.0, 0.0}, {1.0, 1.0}, cells_x / 2, cells_y / 2,
-                            bc);
+  PoissonFVMGSolver<1> dest({0.0, 0.0}, {1.0, 1.0}, cells_x / 2, cells_y / 2);
   dest.restrict(src);
   const Mesh &restricted = dest.source();
   for(int i = 0; i < restricted.cells_x(); i++) {
