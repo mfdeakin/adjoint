@@ -4,6 +4,7 @@
 #include <random>
 
 #include "multigrid.hpp"
+#include "polynomial/polynomial.hpp"
 
 constexpr real pi = 3.1415926535897932;
 
@@ -47,40 +48,76 @@ TEST(mesh, cell_overlap) {
 TEST(boundary_cond, homogeneous) {
   // Verifies that the boundary conditions are only applied to the ghost cells,
   // and that the boundary value is 0.0
-  constexpr int cells_x = 32, cells_y = 32;
-  PoissonFVMGSolver<2> fine({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y);
-  EXPECT_EQ(fine.error_mesh().bconds().left_bc().first,
-            fine.bconds().left_bc().first);
-  EXPECT_EQ(fine.error_mesh().bconds().right_bc().first,
-            fine.bconds().right_bc().first);
-  EXPECT_EQ(fine.error_mesh().bconds().top_bc().first,
-            fine.bconds().top_bc().first);
-  EXPECT_EQ(fine.error_mesh().bconds().bottom_bc().first,
-            fine.bconds().bottom_bc().first);
-
-  Mesh saved({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y);
+  // Use a cubic polynomial to specify the boundary values
   std::random_device rd;
   std::mt19937_64 rng(rd());
-  std::uniform_real_distribution<real> pdf(-100.0, 100.0);
+  std::uniform_real_distribution<real> pdf(-1.0, 1.0);
+  constexpr int degree = 3;
+  Numerical::Polynomial<real, degree, 2> actual;
+  // Start with a random polynomial
+  actual.coeff_iterator([&actual, &pdf, &rng](const Array<int, 2> &exponents) {
+    if(exponents[0] != 0 && exponents[1] != 0) {
+      return;
+    } else {
+      actual.coeff(exponents) = pdf(rng);
+    }
+  });
+  const auto cva_vals = actual.integrate(0).integrate(1);
+  // Now construct the mesh and boundary conditions
+  constexpr int cells_x = 32, cells_y = 32;
+  Mesh fine({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y, 2);
+  auto bndry_val = [actual](const real x, const real y) {
+    return actual.eval(x, y);
+  };
   for(int i = 0; i < fine.cells_x(); i++) {
     for(int j = 0; j < fine.cells_y(); j++) {
-      fine[{i, j}]  = pdf(rng);
-      saved[{i, j}] = fine[{i, j}];
+      fine[{i, j}] = (cva_vals.eval(fine.right_x(i), fine.top_y(j)) -
+                      cva_vals.eval(fine.left_x(i), fine.bottom_y(j))) /
+                     (fine.dx() * fine.dy());
     }
   }
-  fine.bconds().apply(fine);
+  const Mesh saved(fine);
+  // Verify all the cells are correct at the start
   for(int i = 0; i < fine.cells_x(); i++) {
     for(int j = 0; j < fine.cells_y(); j++) {
       EXPECT_EQ((fine[{i, j}]), (saved[{i, j}]));
     }
   }
+  const BoundaryConditions bc(BoundaryConditions::BC_Type::dirichlet, bndry_val,
+                              BoundaryConditions::BC_Type::dirichlet, bndry_val,
+                              BoundaryConditions::BC_Type::dirichlet, bndry_val,
+                              BoundaryConditions::BC_Type::dirichlet,
+                              bndry_val);
+  bc.template apply<4>(fine);
+  // Verify the internal cells haven't changed
   for(int i = 0; i < fine.cells_x(); i++) {
-    EXPECT_EQ((fine[{i, 0}]), (-fine[{i, -1}]));
-    EXPECT_EQ((fine[{i, fine.cells_y() - 1}]), (-fine[{i, fine.cells_y()}]));
+    for(int j = 0; j < fine.cells_y(); j++) {
+      EXPECT_EQ((fine[{i, j}]), (saved[{i, j}]));
+    }
   }
-  for(int j = 0; j < fine.cells_y(); j++) {
-    EXPECT_EQ((fine[{0, j}]), (-fine[{-1, j}]));
-    EXPECT_EQ((fine[{fine.cells_x() - 1, j}]), (-fine[{fine.cells_x(), j}]));
+  printf("Cubic Interpolant Quadrature Points:\n");
+  constexpr int test_y = 5;
+  printf("% .4e, % .4e\n", fine.left_x(0),
+         bndry_val(fine.left_x(0), fine.median_y(test_y)));
+  printf("% .4e, % .4e\n", fine.median_x(0), fine[{0, test_y}]);
+  printf("% .4e, % .4e\n", fine.median_x(1), fine[{1, test_y}]);
+  printf("% .4e, % .4e\n", fine.median_x(2), fine[{2, test_y}]);
+
+  printf("% .4e, % .4e\n", fine.median_x(-1), fine[{-1, test_y}]);
+  printf("% .4e, % .4e\n", fine.median_x(-2), fine[{-2, test_y}]);
+  // Verify the ghost cells match the expected values
+  for(int i = 0; i < fine.ghost_cells(); i++) {
+    for(int j = 0; j < fine.cells_y(); j++) {
+      EXPECT_NEAR((fine[{-1 - i, j}]),
+                  (cva_vals.eval(fine.right_x(-1 - i), fine.top_y(j)) -
+                   cva_vals.eval(fine.left_x(-1 - i), fine.bottom_y(j))) /
+                      (fine.dx() * fine.dy()),
+                  1e-10);
+      // EXPECT_NEAR(
+      //     (fine[{fine.cells_x() + i, j}]),
+      //     actual.eval(fine.median_x(fine.cells_x() + i), fine.median_y(j)),
+      //     1e-10);
+    }
   }
 }
 
@@ -97,22 +134,21 @@ TEST(poisson, residual) {
       test[{i, j}] = test_func(x, y);
     }
   }
-  for(int i = 1; i < test.cells_x() - 1; i++) {
+  for(int i = 2; i < test.cells_x() - 2; i++) {
     const real x = test.median_x(i);
-    for(int j = 1; j < test.cells_y() - 1; j++) {
+    for(int j = 2; j < test.cells_y() - 2; j++) {
       const real y = test.median_y(j);
-      EXPECT_NEAR(test.delta(i, j), test_residual(x, y), 2e-2);
+      EXPECT_NEAR(test.template delta<2>(i, j), test_residual(x, y), 2e-2);
+      EXPECT_NEAR(test.template delta<4>(i, j), test_residual(x, y), 5e-5);
     }
   }
 }
 
 TEST(multigrid, transfer_simple) {
-  constexpr int cells_x = 64, cells_y = 64;
-  BoundaryConditions bc(1.0 / cells_x,
-                        1.0 / cells_y);  // Default homogeneous Dirichlet
+  constexpr int cells_x = 128, cells_y = 128;
 
   // The solver for the homogeneous Poisson problem
-  PoissonFVMGSolverBase src({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y, bc,
+  PoissonFVMGSolverBase src({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y,
                             test_func);
   for(int i = -1; i <= src.cells_x(); i++) {
     const real x = src.median_x(i);
@@ -120,12 +156,12 @@ TEST(multigrid, transfer_simple) {
       const real y = src.median_y(j);
       EXPECT_EQ((src[{i, j}]), 0.0);
       if(i > 0 && i < src.cells_x() && j > 0 && j < src.cells_y()) {
-        EXPECT_EQ(src.delta(i, j), -test_func(x, y));
+        EXPECT_NEAR(src.template delta<2>(i, j), -test_func(x, y), 5e-4);
+        EXPECT_NEAR(src.template delta<4>(i, j), -test_func(x, y), 5e-4);
       }
     }
   }
-  PoissonFVMGSolverBase dest({0.0, 0.0}, {1.0, 1.0}, cells_x / 2, cells_y / 2,
-                             bc);
+  PoissonFVMGSolverBase dest({0.0, 0.0}, {1.0, 1.0}, cells_x / 2, cells_y / 2);
   dest.restrict(src);
   const Mesh &restricted = dest.source();
   real err_norm          = 0.0;
@@ -134,11 +170,8 @@ TEST(multigrid, transfer_simple) {
     for(int j = 0; j < restricted.cells_y(); j++) {
       const real y = restricted.median_y(j);
       dest[{i, j}] = test_func(x, y);
-      // I'm uncertain why my restricted grid doesn't quite meet the 3e-4
-      // threshold... Unless you meant the RMS of the error?
-      // The second test shows that my code does what's expected, it's just the
-      // average of the source terms evaluated at the medians
-      EXPECT_NEAR((restricted[{i, j}]), test_func(x, y), 6.009e-4);
+
+      EXPECT_NEAR((restricted[{i, j}]), test_func(x, y), 7e-4);
       const real err = restricted[{i, j}] - test_func(x, y);
       err_norm += err * err;
 
@@ -146,13 +179,13 @@ TEST(multigrid, transfer_simple) {
       const real x2 = src.median_x(2 * i + 1);
       const real y1 = src.median_y(2 * j);
       const real y2 = src.median_y(2 * j + 1);
-      EXPECT_EQ((restricted[{i, j}]),
-                0.25 * (test_func(x1, y1) + test_func(x1, y2) +
-                        test_func(x2, y1) + test_func(x2, y2)));
+      EXPECT_NEAR((restricted[{i, j}]),
+                  0.25 * (test_func(x1, y1) + test_func(x1, y2) +
+                          test_func(x2, y1) + test_func(x2, y2)),
+                  5e-4);
     }
   }
-  printf("Restriction Error Norm: % .6e, RMS: % .6e\n", sqrt(err_norm),
-         sqrt(err_norm / (restricted.cells_x() * restricted.cells_y())));
+
   err_norm = 0.0;
   Mesh result({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y);
   dest.prolongate(result);
@@ -165,8 +198,6 @@ TEST(multigrid, transfer_simple) {
       err_norm += err * err;
     }
   }
-  printf("Prolongation Error Norm: % .6e, RMS: % .6e\n", sqrt(err_norm),
-         sqrt(err_norm / (result.cells_x() * result.cells_y())));
 }
 
 TEST(multigrid, transfer_combined) {
