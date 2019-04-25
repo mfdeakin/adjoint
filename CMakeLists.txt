@@ -24,4 +24,7 @@ add_executable(multigrid_tester ./src/test.cpp)
 target_link_libraries(multigrid_tester multigrid_poisson gtest pthread)
 add_test(multigrid_test multigrid_tester)
 
+configure_file(./scripts/functional.py functional.py COPYONLY)
 configure_file(./scripts/part1.py part1.py COPYONLY)
+configure_file(./scripts/part3.py part3.py COPYONLY)
+configure_file(./scripts/part4.py part4.py COPYONLY)
