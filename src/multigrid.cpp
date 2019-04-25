@@ -489,7 +489,7 @@ xt::xtensor<real, 1> PoissonFVMGSolverBase::right_bndry_deriv() const noexcept {
   xt::xtensor<real, 1> deriv(xt::xtensor<real, 1>::shape_type{
       {static_cast<unsigned long>(cells_y())}});
   for(int j = 0; j < cells_y(); j++) {
-    deriv(j) = (cv_average(-1, j) - cv_average(0, j)) / dx();
+    deriv(j) = (cv_average(cells_x(), j) - cv_average(cells_x() - 1, j)) / dx();
   }
   return deriv;
 }
@@ -508,7 +508,7 @@ xt::xtensor<real, 1> PoissonFVMGSolverBase::top_bndry_deriv() const noexcept {
   xt::xtensor<real, 1> deriv(xt::xtensor<real, 1>::shape_type{
       {static_cast<unsigned long>(cells_x())}});
   for(int i = 0; i < cells_x(); i++) {
-    deriv(i) = (cv_average(i, -1) - cv_average(i, 0)) / dy();
+    deriv(i) = (cv_average(i, cells_y()) - cv_average(i, cells_y() - 1)) / dy();
   }
   return deriv;
 }

@@ -190,24 +190,24 @@ PYBIND11_MODULE(multigrid, module) {
            })
       .def("left_bndry_val",
            [](const Base &m) {
-             const xt::xtensor<real, 2> t = m.left_bndry_deriv();
+             const xt::xtensor<real, 2> t = m.left_bndry_val();
              return py::array(t.size(), t.data())
                  .attr("reshape")(t.shape()[0], t.shape()[1]);
            })
       .def("right_bndry_val",
            [](const Base &m) {
-             const xt::xtensor<real, 2> t = m.right_bndry_deriv();
+             const xt::xtensor<real, 2> t = m.right_bndry_val();
              return py::array(t.size(), t.data())
                  .attr("reshape")(t.shape()[0], t.shape()[1]);
            })
       .def("bottom_bndry_val",
            [](const Base &m) {
-             const xt::xtensor<real, 2> t = m.bottom_bndry_deriv();
+             const xt::xtensor<real, 2> t = m.bottom_bndry_val();
              return py::array(t.size(), t.data())
                  .attr("reshape")(t.shape()[0], t.shape()[1]);
            })
       .def("top_bndry_val", [](const Base &m) {
-        const xt::xtensor<real, 2> t = m.top_bndry_deriv();
+        const xt::xtensor<real, 2> t = m.top_bndry_val();
         return py::array(t.size(), t.data())
             .attr("reshape")(t.shape()[0], t.shape()[1]);
       });
