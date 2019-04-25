@@ -195,10 +195,10 @@ class PoissonFVMGSolverBase : public Mesh {
 
   // Returns an array of the boundary function evaluated at quadrature points,
   // multiplied by the quadrature weights
-  xt::xtensor<real, 2> left_bndry_val() const noexcept;
-  xt::xtensor<real, 2> right_bndry_val() const noexcept;
-  xt::xtensor<real, 2> bottom_bndry_val() const noexcept;
-  xt::xtensor<real, 2> top_bndry_val() const noexcept;
+  xt::xtensor<real, 1> left_bndry_val() const noexcept;
+  xt::xtensor<real, 1> right_bndry_val() const noexcept;
+  xt::xtensor<real, 1> bottom_bndry_val() const noexcept;
+  xt::xtensor<real, 1> top_bndry_val() const noexcept;
 
  protected:
   BoundaryConditions bc_;

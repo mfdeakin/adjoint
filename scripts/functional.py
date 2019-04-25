@@ -65,27 +65,27 @@ def compute_functional(primal_sol, dual_sol):
        print("NaN locations in the computed solution")
        return None, None
    J_int_approx = u.dot(g) * area
-   J_bndry = ((sum(dual_sol.top_bndry_val(), axis=1)
-               .dot(primal_sol.top_bndry_deriv())
-               + sum(dual_sol.bottom_bndry_val(), axis=1)
-               .dot(primal_sol.bottom_bndry_deriv())) * dx
-              + (sum(dual_sol.left_bndry_val(), axis=1)
-                 .dot(primal_sol.left_bndry_deriv())
-                 + sum(dual_sol.right_bndry_val(), axis=1)
-                 .dot(primal_sol.right_bndry_deriv())) * dy)
+   J_bndry = (dual_sol.top_bndry_val()
+              .dot(primal_sol.top_bndry_deriv())
+              + dual_sol.bottom_bndry_val()
+              .dot(primal_sol.bottom_bndry_deriv())
+              + dual_sol.left_bndry_val()
+              .dot(primal_sol.left_bndry_deriv())
+              + dual_sol.right_bndry_val()
+              .dot(primal_sol.right_bndry_deriv()))
    primal_sol.apply_bc_2()
    du = primal_sol.delta_grid_4()
    du = du.flatten()
    J_delta = du.dot(v) * area
    H_int_approx = v.dot(f) * area
-   H_bndry = ((sum(primal_sol.top_bndry_val(), axis=1)
-               .dot(dual_sol.top_bndry_deriv())
-               + sum(primal_sol.bottom_bndry_val(), axis=1)
-               .dot(dual_sol.bottom_bndry_deriv())) * dx
-              + (sum(primal_sol.left_bndry_val(), axis=1)
-                 .dot(dual_sol.left_bndry_deriv())
-                 + sum(primal_sol.right_bndry_val(), axis=1)
-                 .dot(dual_sol.right_bndry_deriv())) * dy)
+   H_bndry = (primal_sol.top_bndry_val()
+              .dot(dual_sol.top_bndry_deriv())
+              + primal_sol.bottom_bndry_val()
+              .dot(dual_sol.bottom_bndry_deriv())
+              + primal_sol.left_bndry_val()
+              .dot(dual_sol.left_bndry_deriv())
+              + primal_sol.right_bndry_val()
+              .dot(dual_sol.right_bndry_deriv()))
    print(("Approximate Interior J: {:.9f}\n"
           + "Approximate Boundary J: {:.9f}\n"
           + "Delta J: {:.9f}\n"

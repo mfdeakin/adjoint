@@ -513,10 +513,10 @@ xt::xtensor<real, 1> PoissonFVMGSolverBase::top_bndry_deriv() const noexcept {
   return deriv;
 }
 
-xt::xtensor<real, 2> PoissonFVMGSolverBase::left_bndry_val() const noexcept {
+xt::xtensor<real, 1> PoissonFVMGSolverBase::left_bndry_val() const noexcept {
   constexpr unsigned int quad_pts = 3;
-  xt::xtensor<real, 2> avg_val(xt::xtensor<real, 2>::shape_type{
-      {static_cast<unsigned long>(cells_y()), quad_pts}});
+  xt::xtensor<real, 1> avg_val(xt::xtensor<real, 1>::shape_type{
+      {static_cast<unsigned long>(cells_y())}});
   constexpr std::array<real, quad_pts> weights{
       {5.0 / 18.0, 8.0 / 18.0, 5.0 / 18.0}};
   const std::array<real, quad_pts> offsets{
@@ -525,17 +525,19 @@ xt::xtensor<real, 2> PoissonFVMGSolverBase::left_bndry_val() const noexcept {
   const real x       = left_x(0);
   for(int j = 0; j < cells_y(); j++) {
     const real y = median_y(j);
+    avg_val(j)   = 0.0;
     for(unsigned int k = 0; k < quad_pts; k++) {
-      avg_val(j, k) = bc(x, y + offsets[k]) * weights[k];
+      avg_val(j) += bc(x, y + offsets[k]) * weights[k];
     }
+		avg_val(j) *= dy();
   }
   return avg_val;
 }
 
-xt::xtensor<real, 2> PoissonFVMGSolverBase::right_bndry_val() const noexcept {
+xt::xtensor<real, 1> PoissonFVMGSolverBase::right_bndry_val() const noexcept {
   constexpr unsigned int quad_pts = 3;
-  xt::xtensor<real, 2> avg_val(xt::xtensor<real, 2>::shape_type{
-      {static_cast<unsigned long>(cells_y()), quad_pts}});
+  xt::xtensor<real, 1> avg_val(xt::xtensor<real, 1>::shape_type{
+      {static_cast<unsigned long>(cells_y())}});
   constexpr std::array<real, quad_pts> weights{
       {5.0 / 18.0, 8.0 / 18.0, 5.0 / 18.0}};
   const std::array<real, quad_pts> offsets{
@@ -544,17 +546,19 @@ xt::xtensor<real, 2> PoissonFVMGSolverBase::right_bndry_val() const noexcept {
   const real x       = left_x(cells_x());
   for(int j = 0; j < cells_y(); j++) {
     const real y = median_y(j);
+    avg_val(j)   = 0.0;
     for(unsigned int k = 0; k < quad_pts; k++) {
-      avg_val(j, k) = bc(x, y + offsets[k]) * weights[k];
+      avg_val(j) += bc(x, y + offsets[k]) * weights[k];
     }
+		avg_val(j) *= dy();
   }
   return avg_val;
 }
 
-xt::xtensor<real, 2> PoissonFVMGSolverBase::bottom_bndry_val() const noexcept {
+xt::xtensor<real, 1> PoissonFVMGSolverBase::bottom_bndry_val() const noexcept {
   constexpr unsigned int quad_pts = 3;
-  xt::xtensor<real, 2> avg_val(xt::xtensor<real, 2>::shape_type{
-      {static_cast<unsigned long>(cells_y()), quad_pts}});
+  xt::xtensor<real, 1> avg_val(xt::xtensor<real, 1>::shape_type{
+      {static_cast<unsigned long>(cells_y())}});
   constexpr std::array<real, quad_pts> weights{
       {5.0 / 18.0, 8.0 / 18.0, 5.0 / 18.0}};
   const std::array<real, quad_pts> offsets{
@@ -563,17 +567,19 @@ xt::xtensor<real, 2> PoissonFVMGSolverBase::bottom_bndry_val() const noexcept {
   const real y       = bottom_y(0);
   for(int i = 0; i < cells_x(); i++) {
     const real x = median_x(i);
+    avg_val(i)   = 0.0;
     for(unsigned int k = 0; k < quad_pts; k++) {
-      avg_val(i, k) = bc(x + offsets[k], y) * weights[k];
+      avg_val(i) += bc(x + offsets[k], y) * weights[k];
     }
+		avg_val(i) *= dx();
   }
   return avg_val;
 }
 
-xt::xtensor<real, 2> PoissonFVMGSolverBase::top_bndry_val() const noexcept {
+xt::xtensor<real, 1> PoissonFVMGSolverBase::top_bndry_val() const noexcept {
   constexpr unsigned int quad_pts = 3;
-  xt::xtensor<real, 2> avg_val(xt::xtensor<real, 2>::shape_type{
-      {static_cast<unsigned long>(cells_y()), quad_pts}});
+  xt::xtensor<real, 1> avg_val(xt::xtensor<real, 1>::shape_type{
+      {static_cast<unsigned long>(cells_y())}});
   constexpr std::array<real, quad_pts> weights{
       {5.0 / 18.0, 8.0 / 18.0, 5.0 / 18.0}};
   const std::array<real, quad_pts> offsets{
@@ -582,9 +588,11 @@ xt::xtensor<real, 2> PoissonFVMGSolverBase::top_bndry_val() const noexcept {
   const real y       = bottom_y(cells_y());
   for(int i = 0; i < cells_x(); i++) {
     const real x = median_x(i);
+    avg_val(i)   = 0.0;
     for(unsigned int k = 0; k < quad_pts; k++) {
-      avg_val(i, k) = bc(x + offsets[k], y) * weights[k];
+      avg_val(i) += bc(x + offsets[k], y) * weights[k];
     }
+		avg_val(i) *= dx();
   }
   return avg_val;
 }

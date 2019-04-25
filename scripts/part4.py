@@ -7,17 +7,7 @@ def primal_source(x, y, c):
     return ((1.0 + c[1]) * f(x, y) + c[2] * g(x, y))
 
 if __name__ == "__main__":
-    primal_bc = BoundaryConditions(BoundaryConditions.BC_Type.dirichlet, homogen,
-                                   BoundaryConditions.BC_Type.dirichlet, homogen,
-                                   BoundaryConditions.BC_Type.dirichlet,
-                                   lambda x, y: sin(pi * x),
-                                   BoundaryConditions.BC_Type.dirichlet, homogen)
-    dual_bc = BoundaryConditions(BoundaryConditions.BC_Type.dirichlet, homogen,
-                                 BoundaryConditions.BC_Type.dirichlet, homogen,
-                                 BoundaryConditions.BC_Type.dirichlet, homogen,
-                                 BoundaryConditions.BC_Type.dirichlet,
-                                 lambda x, y: x * (1.0 - x))
-    functionals = convergence(4, 40, primal_bc, dual_bc)
+    functionals = convergence(4, 40, BoundaryConditions(), BoundaryConditions())
     for J_2, J_4, H_2 in functionals:
         print("{:.9f}, {:.9f}, {:.9f}".format(J_2, J_4, H_2))
     show()
