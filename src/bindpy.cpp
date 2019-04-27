@@ -172,6 +172,13 @@ PYBIND11_MODULE(multigrid, module) {
              return py::array(m.cells_x() * m.cells_y(), grid.data())
                  .attr("reshape")(m.cells_x(), m.cells_y());
            })
+      .def("operator_mtx_2",
+           [](const Base &m) {
+             matrix L = m.template operator_mtx<2>();
+             return py::array(L.size(), L.data())
+                 .attr("reshape")(L.shape()[0], L.shape()[1]);
+           })
+      .def("operator_mtx_4", &Base::operator_mtx<4>)
       .def("left_bndry_deriv",
            [](const Base &m) {
              return py::array(m.cells_y(), m.left_bndry_deriv().data());

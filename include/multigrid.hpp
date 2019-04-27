@@ -7,9 +7,8 @@
 
 #include "xtensor/xtensor.hpp"
 
+#include "constants.hpp"
 #include "polynomial/polynomial.hpp"
-
-using real = double;
 
 class Mesh {
  public:
@@ -181,6 +180,9 @@ class PoissonFVMGSolverBase : public Mesh {
   template <unsigned int order>
   real delta(const int i, const int j) const noexcept;
 
+	template <unsigned int order>
+	matrix operator_mtx() const noexcept;
+
   template <unsigned int order>
   void apply_bc() noexcept {
     bc_.template apply<order>(*this);
@@ -199,6 +201,9 @@ class PoissonFVMGSolverBase : public Mesh {
   xt::xtensor<real, 1> right_bndry_val() const noexcept;
   xt::xtensor<real, 1> bottom_bndry_val() const noexcept;
   xt::xtensor<real, 1> top_bndry_val() const noexcept;
+
+	// Returns the index in the matrix of the mesh cell
+	int cell_index(const int i, const int j) const noexcept;
 
  protected:
   BoundaryConditions bc_;

@@ -39,8 +39,8 @@ Mesh::Mesh(const std::pair<real, real> &corner_1,
         j < static_cast<int>(this->cells_y()) + ghost_cells(); j++) {
       // Use 5th order Gauss-Legendre quadrature to set the cell to the average
       const real x0 = median_x(i), y0 = median_y(j);
-      const real off_x       = dx() / 2.0 * std::sqrt(3.0 / 5.0);
-      const real off_y       = dy() / 2.0 * std::sqrt(3.0 / 5.0);
+      // const real off_x       = dx() / 2.0 * std::sqrt(3.0 / 5.0);
+      // const real off_y       = dy() / 2.0 * std::sqrt(3.0 / 5.0);
       constexpr int quad_pts = 1;
       const std::array<real, quad_pts> weights{{1.0}};
       const std::array<real, quad_pts> x_coords{{x0}};
@@ -407,15 +407,155 @@ real PoissonFVMGSolverBase::delta<4>(const int i, const int j) const noexcept {
   assert(j < cells_y());
   // Our problem is the form of \del u = f
   // The residual is then just r = \del u - f
-  return ((-cv_average(i - 2, j) + 16.0 * cv_average(i - 1, j) -
-           30.0 * cv_average(i, j) + 16.0 * cv_average(i + 1, j) -
-           cv_average(i + 2, j)) /
-              (12.0 * dx_ * dx_) +
-          (-cv_average(i, j - 2) + 16.0 * cv_average(i, j - 1) -
-           30.0 * cv_average(i, j) + 16.0 * cv_average(i, j + 1) -
-           cv_average(i, j + 2)) /
-              (12.0 * dy_ * dy_)) -
-         source_[{i, j}];
+  real delta_x = s_nan;
+  if(i >= 2 && i < cells_x() - 2) {
+    delta_x = -cv_average(i - 2, j) + 16.0 * cv_average(i - 1, j) -
+              30.0 * cv_average(i, j) + 16.0 * cv_average(i + 1, j) -
+              cv_average(i + 2, j);
+
+  } else if(i == 1) {
+    delta_x = -cv_average(i + 3, j) + 4.0 * cv_average(i + 2, j) +
+              6.0 * cv_average(i + 1, j) - 20.0 * cv_average(i, j) +
+              11.0 * cv_average(i - 1, j);
+  } else if(i == cells_x() - 2) {
+    delta_x = -cv_average(i - 3, j) + 4.0 * cv_average(i - 2, j) +
+              6.0 * cv_average(i - 1, j) - 20.0 * cv_average(i, j) +
+              11.0 * cv_average(i + 1, j);
+
+  } else if(i == 0) {
+    delta_x = 11.0 * cv_average(i + 4, j) - 56.0 * cv_average(i + 3, j) +
+              114.0 * cv_average(i + 2, j) - 104.0 * cv_average(i + 1, j) +
+              35.0 * cv_average(i, j);
+  } else if(i == cells_x() - 1) {
+    delta_x = 11.0 * cv_average(i - 4, j) - 56.0 * cv_average(i - 3, j) +
+              114.0 * cv_average(i - 2, j) - 104.0 * cv_average(i - 1, j) +
+              35.0 * cv_average(i, j);
+  }
+  delta_x /= 12.0 * dx_ * dx_;
+  real delta_y = s_nan;
+  if(j >= 2 && j < cells_y() - 2) {
+    delta_y = -cv_average(i, j - 2) + 16.0 * cv_average(i, j - 1) -
+              30.0 * cv_average(i, j) + 16.0 * cv_average(i, j + 1) -
+              cv_average(i, j + 2);
+
+  } else if(j == 1) {
+    delta_y = -cv_average(i, j + 3) + 4.0 * cv_average(i, j + 2) +
+              6.0 * cv_average(i, j + 1) - 20.0 * cv_average(i, j) +
+              11.0 * cv_average(i, j - 1);
+  } else if(j == cells_y() - 2) {
+    delta_y = -cv_average(i, j - 3) + 4.0 * cv_average(i, j - 2) +
+              6.0 * cv_average(i, j - 1) - 20.0 * cv_average(i, j) +
+              11.0 * cv_average(i, j + 1);
+
+  } else if(j == 0) {
+    delta_y = 11.0 * cv_average(i, j + 4) - 56.0 * cv_average(i, j + 3) +
+              114.0 * cv_average(i, j + 2) - 104.0 * cv_average(i, j + 1) +
+              35.0 * cv_average(i, j);
+  } else if(j == cells_y() - 1) {
+    delta_y = 11.0 * cv_average(i, j - 4) - 56.0 * cv_average(i, j - 3) +
+              114.0 * cv_average(i, j - 2) - 104.0 * cv_average(i, j - 1) +
+              35.0 * cv_average(i, j);
+  }
+  delta_y /= 12.0 * dy_ * dy_;
+  return delta_x + delta_y - source_[{i, j}];
+}
+
+int PoissonFVMGSolverBase::cell_index(const int i, const int j) const noexcept {
+  assert(i >= 0);
+  assert(i < cells_x());
+  assert(j >= 0);
+  assert(j < cells_y());
+  return i * cells_y() + j;
+}
+
+template <>
+matrix PoissonFVMGSolverBase::operator_mtx<2>() const noexcept {
+  const unsigned int N = static_cast<unsigned long>(cells_x()) *
+                         static_cast<unsigned long>(cells_y());
+  matrix L(matrix::shape_type{{N, N}});
+  for(unsigned int i = 0; i < N; i++) {
+    for(unsigned int j = 0; j < N; j++) {
+      L(i, j) = 0.0;
+    }
+  }
+  const real inv_dxsq = 1.0 / (dx() * dx());
+  const real inv_dysq = 1.0 / (dy() * dy());
+  for(int i = 0; i < cells_x(); i++) {
+    for(int j = 0; j < cells_y(); j++) {
+      const int idx = cell_index(i, j);
+      if(i > 0) {
+        const int left = cell_index(i - 1, j);
+        L(idx, left)   = inv_dxsq;
+      }
+      if(j > 0) {
+        const int below = cell_index(i, j - 1);
+        L(idx, below)   = inv_dysq;
+      }
+      L(idx, idx) = -2.0 * (inv_dxsq + inv_dysq);
+      if(j > 0) {
+        const int above = cell_index(i, j + 1);
+        L(idx, above)   = inv_dysq;
+      }
+      if(i < cells_x()) {
+        const int right = cell_index(i + 1, j);
+        L(idx, right)   = inv_dxsq;
+      }
+    }
+  }
+  return L;
+}
+
+template <>
+matrix PoissonFVMGSolverBase::operator_mtx<4>() const noexcept {
+  const unsigned int N = static_cast<unsigned long>(cells_x()) *
+                         static_cast<unsigned long>(cells_y());
+  matrix L(matrix::shape_type{{N, N}});
+  for(unsigned int i = 0; i < N; i++) {
+    for(unsigned int j = 0; j < N; j++) {
+      L(i, j) = 0.0;
+    }
+  }
+  const real inv_dxsq = 1.0 / (12.0 * dx() * dx());
+  const real inv_dysq = 1.0 / (12.0 * dy() * dy());
+  for(int i = 0; i < cells_x(); i++) {
+    for(int j = 0; j < cells_y(); j++) {
+      const int idx = cell_index(i, j);
+      if(i > 0) {
+        if(i > 1) {
+          const int left_2 = cell_index(i - 2, j);
+          L(idx, left_2)   = -inv_dxsq;
+        }
+        const int left = cell_index(i - 1, j);
+        L(idx, left)   = 16.0 * inv_dxsq;
+      }
+      if(j > 0) {
+        if(j > 1) {
+          const int below_2 = cell_index(i, j - 2);
+          L(idx, below_2)   = -inv_dysq;
+        }
+        const int below = cell_index(i, j - 1);
+        L(idx, below)   = 16.0 * inv_dysq;
+      }
+      L(idx, idx) = -30.0 * (inv_dxsq + inv_dysq);
+      if(j > 0) {
+        const int above = cell_index(i, j + 1);
+        L(idx, above)   = 16.0 * inv_dysq;
+        if(j < cells_y() - 1) {
+          const int above_2 = cell_index(i, j + 2);
+          L(idx, above_2)   = -inv_dysq;
+        }
+      }
+      if(i < cells_x()) {
+        const int right = cell_index(i + 1, j);
+        L(idx, right)   = 16.0 * inv_dxsq;
+        if(i < cells_x() - 1) {
+          const int right_2 = cell_index(i + 2, j);
+          L(idx, right_2)   = -inv_dxsq;
+        }
+      }
+    }
+  }
+  return L;
 }
 
 template <unsigned int order>
@@ -444,8 +584,8 @@ void PoissonFVMGSolverBase::restrict(
 
   for(int i = 0; i < cells_x(); i++) {
     for(int j = 0; j < cells_y(); j++) {
-      // The restriction sets the source to the average of the residual for the
-      // cells in the same area
+      // The restriction sets the source to the average of the residual for
+      // the cells in the same area
       source_[{i, j}] = -0.25 * (src.template delta<2>(2 * i, 2 * j) +
                                  src.template delta<2>(2 * i, 2 * j + 1) +
                                  src.template delta<2>(2 * i + 1, 2 * j) +
@@ -529,7 +669,7 @@ xt::xtensor<real, 1> PoissonFVMGSolverBase::left_bndry_val() const noexcept {
     for(unsigned int k = 0; k < quad_pts; k++) {
       avg_val(j) += bc(x, y + offsets[k]) * weights[k];
     }
-		avg_val(j) *= dy();
+    avg_val(j) *= dy();
   }
   return avg_val;
 }
@@ -550,7 +690,7 @@ xt::xtensor<real, 1> PoissonFVMGSolverBase::right_bndry_val() const noexcept {
     for(unsigned int k = 0; k < quad_pts; k++) {
       avg_val(j) += bc(x, y + offsets[k]) * weights[k];
     }
-		avg_val(j) *= dy();
+    avg_val(j) *= dy();
   }
   return avg_val;
 }
@@ -571,7 +711,7 @@ xt::xtensor<real, 1> PoissonFVMGSolverBase::bottom_bndry_val() const noexcept {
     for(unsigned int k = 0; k < quad_pts; k++) {
       avg_val(i) += bc(x + offsets[k], y) * weights[k];
     }
-		avg_val(i) *= dx();
+    avg_val(i) *= dx();
   }
   return avg_val;
 }
@@ -592,7 +732,7 @@ xt::xtensor<real, 1> PoissonFVMGSolverBase::top_bndry_val() const noexcept {
     for(unsigned int k = 0; k < quad_pts; k++) {
       avg_val(i) += bc(x + offsets[k], y) * weights[k];
     }
-		avg_val(i) *= dx();
+    avg_val(i) *= dx();
   }
   return avg_val;
 }

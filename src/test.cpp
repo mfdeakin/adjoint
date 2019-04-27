@@ -3,10 +3,9 @@
 #include <cmath>
 #include <random>
 
+#include "constants.hpp"
 #include "multigrid.hpp"
 #include "polynomial/polynomial.hpp"
-
-constexpr real pi = 3.1415926535897932;
 
 real test_func(real x, real y) { return std::sin(pi * x) * std::sin(pi * y); }
 real test_residual(real x, real y) { return -2.0 * pi * pi * test_func(x, y); }
@@ -121,25 +120,69 @@ TEST(boundary_cond, homogeneous) {
   }
 }
 
-TEST(poisson, residual) {
-  constexpr int cells_x = 32, cells_y = 32;
+TEST(poisson, residual_coarse) {
+  constexpr int cells_x = 256, cells_y = 256;
 
   // The solver for the homogeneous Poisson problem
   PoissonFVMGSolverBase test({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y);
   // Initialize its solution guess with the test function
-  for(int i = 0; i < test.cells_x(); i++) {
+  for(int i = -test.ghost_cells(); i < test.cells_x() + test.ghost_cells();
+      i++) {
     const real x = test.median_x(i);
-    for(int j = 0; j < test.cells_y(); j++) {
+    for(int j = -test.ghost_cells(); j < test.cells_y() + test.ghost_cells();
+        j++) {
       const real y = test.median_y(j);
       test[{i, j}] = test_func(x, y);
     }
   }
-  for(int i = 2; i < test.cells_x() - 2; i++) {
+  for(int i = 0; i < test.cells_x(); i++) {
     const real x = test.median_x(i);
-    for(int j = 2; j < test.cells_y() - 2; j++) {
+    for(int j = 0; j < test.cells_y(); j++) {
       const real y = test.median_y(j);
-      EXPECT_NEAR(test.template delta<2>(i, j), test_residual(x, y), 2e-2);
-      EXPECT_NEAR(test.template delta<4>(i, j), test_residual(x, y), 5e-5);
+      // These error bounds are somewhat tight, they were estimated with a
+      // binary search
+      EXPECT_NEAR(test.template delta<2>(i, j), test_residual(x, y), 3e-4);
+      EXPECT_NEAR(test.template delta<4>(i, j), test_residual(x, y), 2e-5);
+    }
+  }
+}
+
+TEST(poisson, residual_fine) {
+  constexpr int cells_x = 512, cells_y = 512;
+
+  // The solver for the homogeneous Poisson problem
+  PoissonFVMGSolverBase test({0.0, 0.0}, {1.0, 1.0}, cells_x, cells_y);
+  // Initialize its solution guess with the test function
+  for(int i = -test.ghost_cells(); i < test.cells_x() + test.ghost_cells();
+      i++) {
+    const real x = test.median_x(i);
+    for(int j = -test.ghost_cells(); j < test.cells_y() + test.ghost_cells();
+        j++) {
+      const real y = test.median_y(j);
+      test[{i, j}] = test_func(x, y);
+    }
+  }
+  for(int i = 0; i < test.cells_x(); i++) {
+    const real x = test.median_x(i);
+    for(int j = 0; j < test.cells_y(); j++) {
+      const real y = test.median_y(j);
+      // This is second order convergent, so it should have an error 1/4 of that
+      // in the coarse case
+      EXPECT_NEAR(test.template delta<2>(i, j), test_residual(x, y),
+                  3e-4 / 4.0);
+      if(i > 0 && i < test.cells_x() - 1 && j > 0 && j < test.cells_y() - 1) {
+        // This is fourth order convergent, so it should have an error 1/16 of
+        // that in the coarse case
+        // Because the fourth order version uses upwinding to avoid implementing
+        // the boundary conditions, this only really works for the interior
+        // cells, for the cells adjacent to the boundary the error is a bit
+        // worse than expected, about third order
+        EXPECT_NEAR(test.template delta<4>(i, j), test_residual(x, y),
+                    2e-5 / 16.0);
+      } else {
+        EXPECT_NEAR(test.template delta<4>(i, j), test_residual(x, y),
+                    2e-5 / 10.0);
+      }
     }
   }
 }
