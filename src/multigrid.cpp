@@ -492,11 +492,11 @@ matrix PoissonFVMGSolverBase::operator_mtx<2>() const noexcept {
         L(idx, below)   = inv_dysq;
       }
       L(idx, idx) = -2.0 * (inv_dxsq + inv_dysq);
-      if(j > 0) {
+      if(j < cells_y() - 1) {
         const int above = cell_index(i, j + 1);
         L(idx, above)   = inv_dysq;
       }
-      if(i < cells_x()) {
+      if(i < cells_x() - 1) {
         const int right = cell_index(i + 1, j);
         L(idx, right)   = inv_dxsq;
       }
